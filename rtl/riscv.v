@@ -1,8 +1,30 @@
+`timescale 1ns / 1ps
+//////////////////////////////////////////////////////////////////////////////////
+// Company: 
+// Engineer: 
+// 
+// Create Date: 06.06.2025 16:02:42
+// Design Name: 
+// Module Name: riscv
+// Project Name: 
+// Target Devices: 
+// Tool Versions: 
+// Description: 
+// 
+// Dependencies: 
+// 
+// Revision:
+// Revision 0.01 - File Created
+// Additional Comments:
+// 
+//////////////////////////////////////////////////////////////////////////////////
+
+
 // Copyright © 2020 Kuoping Hsu
 // Three pipeline stage RV32IM RISCV processor
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the “Software”), to deal
+// of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights 
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
@@ -11,7 +33,7 @@
 // The above copyright notice and this permission notice shall be included in
 // all copies or substantial portions of the Software.
 //
-// THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
@@ -33,12 +55,9 @@ module riscv #(
 
     input                   stall,
     output reg              exception,
-    output                  timer_en,
 
     // interrupt
-    input                   timer_irq,
-    input                   sw_irq,
-    input                   interrupt,
+    //input                   interrupt,
 
     // interface of instruction RAM
     output                  imem_ready,
@@ -58,7 +77,14 @@ module riscv #(
     input                   dmem_rvalid,
     output          [31: 0] dmem_raddr,
     input                   dmem_rresp,
-    input           [31: 0] dmem_rdata
+    input           [31: 0] dmem_rdata,
+    output                  timer_en,
+    // added by me
+    input irq_valid,
+    input  [ 4:0]  irq_id,
+    input   [ 7:0]  irq_level,
+    output clic_irq
+  
 );
 
 `include "opcode.vh"
@@ -123,9 +149,10 @@ module riscv #(
     wire                    ex_st_align_excp;
     wire                    ex_inst_ill_excp;
     wire                    ex_inst_align_excp;
-    wire                    ex_timer_irq;
-    wire                    ex_sw_irq;
-    wire                    ex_interrupt;
+//    wire                    ex_timer_irq;
+//    wire                    ex_sw_irq;
+//    wire                    ex_interrupt;
+    reg                   ex_clic_irq;
     reg                     ex_mul;
     reg                     wb_alu2reg;
     reg             [31: 0] wb_result;
@@ -160,6 +187,11 @@ module riscv #(
     reg             [31: 0] csr_mepc;
     reg             [31: 0] csr_mcause;
     reg             [31: 0] csr_mtval;
+    
+    
+    // added by me 
+    reg             [31:0]csr_mintstatus;    
+   //
 
     integer                 i;
 
@@ -219,8 +251,10 @@ always @* begin
         OP_BRANCH: imm      = {{20{inst[31]}}, inst[7], inst[30:25], inst[11:8], 1'b0}; // B-type
         OP_LOAD  : imm      = {{20{inst[31]}}, inst[31:20]}; // I-type
         OP_STORE : imm      = {{20{inst[31]}}, inst[31:25], inst[11:7]}; // S-type
-        OP_ARITHI: imm      = (inst[`FUNC3] == OP_SLL || inst[`FUNC3] == OP_SR) ?
-                              {27'h0, inst[24:20]} : {{20{inst[31]}}, inst[31:20]}; // I-type
+//        OP_ARITHI: imm      = (inst[`FUNC3] == OP_SLL || inst[`FUNC3] == OP_SR) ?
+//                              {27'h0, inst[24:20]} : {{20{inst[31]}}, inst[31:20]}; // I-type
+        OP_ARITHI: imm      = (inst[`FUNC3] == OP_SLL || inst[`FUNC3] == OP_SR) ?// !!!!!!!! edited by me
+                              {27'h0, inst[24:20]} : {20'b0, inst[31:20]}; // I-type
         OP_ARITHR: imm      = 'd0; // R-type
         OP_FENCE : imm      = 'd0;
         OP_SYSTEM: imm      = {20'h0, inst[31:20]};
@@ -359,12 +393,18 @@ assign ex_st_align_excp     = ex_memwr && !ex_flush && (
                               );
 assign ex_inst_ill_excp     = !ex_flush && (ex_ill_branch || ex_ill_csr || ex_illegal);
 assign ex_inst_align_excp   = !ex_flush && |next_pc[1:0];
-assign ex_timer_irq         = timer_irq && csr_mstatus[MIE] && csr_mie[MTIE] &&
-                              !ex_system_op && !ex_flush;
-assign ex_sw_irq            = sw_irq && csr_mstatus[MIE] && csr_mie[MSIE] &&
-                              !ex_system_op && !ex_flush;
-assign ex_interrupt         = interrupt && csr_mstatus[MIE] && csr_mie[MEIE] &&
-                              !ex_system_op && !ex_flush;
+//assign ex_timer_irq         = timer_irq && csr_mstatus[MIE] && csr_mie[MTIE] &&
+//                              !ex_system_op && !ex_flush;
+//assign ex_sw_irq            = sw_irq && csr_mstatus[MIE] && csr_mie[MSIE] &&
+//                              !ex_system_op && !ex_flush;
+//assign ex_interrupt         = interrupt && csr_mstatus[MIE] && csr_mie[MEIE] &&
+//                              !ex_system_op && !ex_flush;
+//
+always@(posedge clk or negedge resetb) begin
+ ex_clic_irq <= irq_valid &&(!csr_mintstatus[8])&& !ex_system_op && !ex_flush;
+ end
+assign clic_irq = ex_clic_irq;
+//
 
 assign ex_stall             = stall_r || if_stall ||
                               (ex_mem2reg && !dmem_rvalid);
@@ -673,13 +713,17 @@ end
 // Trap CSR @ execution stage
 assign ex_trap_nop  = (ex_inst_ill_excp || ex_inst_align_excp ||
                        ex_ld_align_excp || ex_st_align_excp) && !ex_flush;
+//assign ex_trap      = (ex_inst_ill_excp || ex_inst_align_excp ||
+//                       ex_ld_align_excp || ex_st_align_excp ||
+//                       ex_timer_irq || ex_sw_irq || ex_interrupt ||
+//                       ex_systemcall) && !ex_flush;
+
 assign ex_trap      = (ex_inst_ill_excp || ex_inst_align_excp ||
-                       ex_ld_align_excp || ex_st_align_excp ||
-                       ex_timer_irq || ex_sw_irq || ex_interrupt ||
+                       ex_ld_align_excp || ex_st_align_excp || ex_clic_irq ||
                        ex_systemcall) && !ex_flush;
 assign ex_trap_pc   = (ex_systemcall && ex_imm[1:0] == 2'b10) ? // mret
                       csr_mepc :
-                      csr_mtvec[0] ?
+                      csr_mtvec[0] ?// direct mode or vectored mode
                       {csr_mtvec[31:2], 2'b00} + {26'h0, ex_mcause[3:0], 2'b00} :
                       {csr_mtvec[31:2], 2'b00};
 
@@ -692,9 +736,9 @@ always @* begin
         ex_inst_align_excp : ex_mcause = TRAP_INST_ALIGN;
         ex_ld_align_excp   : ex_mcause = TRAP_LD_ALIGN;
         ex_st_align_excp   : ex_mcause = TRAP_ST_ALIGN;
-        ex_timer_irq       : ex_mcause = INT_MTIME;
-        ex_sw_irq          : ex_mcause = INT_MSI;
-        ex_interrupt       : ex_mcause = INT_MEI;
+//        ex_timer_irq       : ex_mcause = INT_MTIME;
+//        ex_sw_irq          : ex_mcause = INT_MSI;
+//        ex_interrupt       : ex_mcause = INT_MEI;
         ex_systemcall      : begin
             case (ex_imm[1:0])
                 2'b00: ex_mcause   = TRAP_ECALL;
@@ -722,6 +766,7 @@ always @(posedge clk or negedge resetb) begin
         csr_mstatus                 <= 32'h0;
         csr_mstatush                <= 32'h0;
         csr_mip                     <= 32'h0;
+        csr_mintstatus              <= 32'h0;
     end else if (!ex_stall && !ex_flush) begin
         case(1'b1)
             ex_inst_ill_excp : begin
@@ -745,13 +790,13 @@ always @(posedge clk or negedge resetb) begin
                                        (csr_mcause & ~ex_csr_data); // CSRRC
                     end
                     CSR_MTVAL  : begin
-                        csr_mtval   <= !ex_alu_op[1] ? ex_csr_data : // CSRRW
+                        csr_mtval    <= !ex_alu_op[1] ? ex_csr_data : // CSRRW
                                        !ex_alu_op[0] ? (csr_mtval | ex_csr_data) : // CSRRS
                                        (csr_mtval & ~ex_csr_data); // CSRRC
                     end
                     CSR_MSTATUS: begin
-                        csr_mstatus <= !ex_alu_op[1] ? ex_csr_data : // CSRRW
-                                       !ex_alu_op[0] ? (csr_mstatus | ex_csr_data) : // CSRRS
+                        csr_mstatus <= (!ex_alu_op[1]) ? ex_csr_data : // CSRRW
+                                       (!ex_alu_op[0]) ? (csr_mstatus | ex_csr_data) : // CSRRS ! ex_alu_op[0] ? (csr_mstatus | ex_csr_data) :
                                        (csr_mstatus & ~ex_csr_data); // CSRRC
                     end
                     CSR_MSTATUSH: begin
@@ -759,11 +804,17 @@ always @(posedge clk or negedge resetb) begin
                                         !ex_alu_op[0] ? (csr_mstatush | ex_csr_data) : // CSRRS
                                         (csr_mstatush & ~ex_csr_data); // CSRRC
                     end
-                    CSR_MIP    : begin
-                        csr_mip     <= !ex_alu_op[1] ? ex_csr_data : // CSRRW
-                                       !ex_alu_op[0] ? (csr_mip | ex_csr_data) : // CSRRS
-                                       (csr_mip & ~ex_csr_data); // CSRRC
+//                    CSR_MIP    : begin
+//                        csr_mip     <= !ex_alu_op[1] ? ex_csr_data : // CSRRW
+//                                       !ex_alu_op[0] ? (csr_mip | ex_csr_data) : // CSRRS
+//                                       (csr_mip & ~ex_csr_data); // CSRRC
+//                    end
+                    CSR_MINTSTATUS:begin 
+                       csr_mintstatus <= (!ex_alu_op[1]) ? ex_csr_data :
+                      (!ex_alu_op[0]) ? (csr_mintstatus | ex_csr_data) :
+                                        (csr_mintstatus & ~ex_csr_data); 
                     end
+                   
                     default    : ;
                 endcase
             end
@@ -791,30 +842,38 @@ always @(posedge clk or negedge resetb) begin
                 csr_mstatus[MIE]    <= 1'b0;
                 csr_mip             <= csr_mip;
             end
-            ex_timer_irq : begin
-                csr_mcause          <= INT_MTIME;
-                csr_mepc            <= {ex_ret_pc[31: 1], 1'b0};
-                csr_mtval           <= 32'd0; // FIXME
-                csr_mstatus[MPIE]   <= csr_mstatus[MIE];
-                csr_mstatus[MIE]    <= 1'b0;
-                csr_mip[MTIP]       <= 1'b1;
-            end
-            ex_sw_irq : begin
-                csr_mcause          <= INT_MSI;
-                csr_mepc            <= {ex_ret_pc[31: 1], 1'b0};
-                csr_mtval           <= 32'd0; // FIXME
-                csr_mstatus[MPIE]   <= csr_mstatus[MIE];
-                csr_mstatus[MIE]    <= 1'b0;
-                csr_mip[MSIP]       <= 1'b1;
-            end
-            ex_interrupt : begin
-                csr_mcause          <= INT_MEI;
-                csr_mepc            <= {ex_ret_pc[31: 1], 1'b0};
-                csr_mtval           <= 32'd0; // FIXME
-                csr_mstatus[MPIE]   <= csr_mstatus[MIE];
-                csr_mstatus[MIE]    <= 1'b0;
-                csr_mip[MEIP]       <= 1'b1;
-            end
+//            ex_timer_irq : begin
+//                csr_mcause          <= INT_MTIME;
+//                csr_mepc            <= {ex_ret_pc[31: 1], 1'b0};
+//                csr_mtval           <= 32'd0; // FIXME
+//                csr_mstatus[MPIE]   <= csr_mstatus[MIE];
+//                csr_mstatus[MIE]    <= 1'b0;
+//                csr_mip[MTIP]       <= 1'b1;
+//            end
+//            ex_sw_irq : begin
+//                csr_mcause          <= INT_MSI;
+//                csr_mepc            <= {ex_ret_pc[31: 1], 1'b0};
+//                csr_mtval           <= 32'd0; // FIXME
+//                csr_mstatus[MPIE]   <= csr_mstatus[MIE];
+//                csr_mstatus[MIE]    <= 1'b0;
+//                csr_mip[MSIP]       <= 1'b1;
+//            end
+//            ex_interrupt : begin
+//                csr_mcause          <= INT_MEI;
+//                csr_mepc            <= {ex_ret_pc[31: 1], 1'b0};
+//                csr_mtval           <= 32'd0; // FIXME
+//                csr_mstatus[MPIE]   <= csr_mstatus[MIE];
+//                csr_mstatus[MIE]    <= 1'b0;
+//                csr_mip[MEIP]       <= 1'b1;
+//            end
+               ex_clic_irq: begin 
+                  csr_mepc           <= {ex_ret_pc[31:1], 1'b0};
+                  csr_mcause     <= {19'b0,csr_mintstatus[7:0], irq_id}; // save old value 
+                  csr_mtval          <= 32'd0;         
+                  csr_mstatus[MPIE]  <= csr_mstatus[MIE];
+                  csr_mstatus[MIE]   <= 1'b0;
+                  csr_mintstatus     <= {23'b0,1'b1,irq_level};
+               end
             ex_systemcall : begin
                 case (ex_imm[1:0])
                     2'b00: begin // ECALL
@@ -880,6 +939,9 @@ always @* begin
             CSR_RDCYCLEH   : ex_csr_read = csr_cycle[63:32];
             CSR_RDINSTRET  : ex_csr_read = csr_instret[31:0];
             CSR_RDINSTRETH : ex_csr_read = csr_instret[63:32];
+            //
+            CSR_MINTSTATUS : ex_csr_read = csr_mintstatus;
+            //
             default: begin
                 ex_ill_csr = 1'b1;
                 `ifndef SYNTHESIS
@@ -913,11 +975,11 @@ always @(posedge clk or negedge resetb) begin
                                !ex_alu_op[0] ? (csr_misa | ex_csr_data) : // CSRRS
                                (csr_misa & ~ex_csr_data); // CSRRC
             end
-            CSR_MIE        : begin
-                csr_mie     <= !ex_alu_op[1] ? ex_csr_data : // CSRRW
-                               !ex_alu_op[0] ? (csr_mie | ex_csr_data) : // CSRRS
-                               (csr_mie & ~ex_csr_data); // CSRRC
-            end
+//            CSR_MIE        : begin
+//                csr_mie     <= !ex_alu_op[1] ? ex_csr_data : // CSRRW
+//                              !ex_alu_op[0] ? (csr_mie | ex_csr_data) : // CSRRS
+//                               (csr_mie & ~ex_csr_data); // CSRRC
+//            end
             CSR_MTVEC      : begin
                 csr_mtvec   <= !ex_alu_op[1] ? ex_csr_data : // CSRRW
                                !ex_alu_op[0] ? (csr_mtvec | ex_csr_data) : // CSRRS
@@ -1086,16 +1148,16 @@ always @(posedge clk) begin
         wb_raddress         <= dmem_raddr[31:0];
     end
 end
-
+// i change below code
 // If the exception occurs and csr_mtvec is not initialized (or initialized to 0),
 // exit the simulation
-always @(posedge clk) begin
-    if (!ex_stall && ex_trap && csr_mtvec[31:2] == 'd0) begin
-        $display("Exception cached but mtvec is not initialized (or initialize to 0).");
-        $display("Stop simulation.");
-        $finish(2);
-    end
-end
+//always @(posedge clk) begin
+//    if (!ex_stall && ex_trap && csr_mtvec[31:2] == 'd0) begin
+//        $display("Exception cached but mtvec is not initialized (or initialize to 0).");
+//        $display("Stop simulation.");
+//        $finish(2);
+//    end
+//end
 
 function [31:0] set_reg;
     input [ 4:0] regn;
@@ -1113,4 +1175,3 @@ endfunction
 `endif // SYNTHESIS
 
 endmodule
-

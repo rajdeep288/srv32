@@ -2,7 +2,7 @@
 // Three pipeline stage RV32IM RISCV processor
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the “Software”), to deal
+// of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights 
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
@@ -11,7 +11,7 @@
 // The above copyright notice and this permission notice shall be included in
 // all copies or substantial portions of the Software.
 //
-// THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
@@ -26,7 +26,8 @@ module top #(
     parameter RV32M = 1,
     parameter RV32E = 0,
     parameter RV32B = 0,
-    parameter RV32C = 0
+    parameter RV32C = 0,
+    parameter NUM_INTERRUPTS=32
 )(
     input                   clk,
     input                   resetb,
@@ -35,7 +36,7 @@ module top #(
     output                  exception,
 
     // interrupt
-    input                   interrupt,
+    //input                   interrupt,
 
     // interface of instruction RAM
     output                  imem_ready,
@@ -57,7 +58,7 @@ module top #(
     input                   dmem_rresp,
     input           [31: 0] dmem_rdata,
 
-    output                  ex_irq
+    input           [31:0]       ex_irq
 );
 
     `include                "opcode.vh"
@@ -90,10 +91,16 @@ module top #(
     wire            [31: 0] drdata;
     reg                     data_sel;
     wire                    sw_irq;
+    // added by me
+    wire                    irq_valid;
+    wire             [4:0]  irq_id;
+    wire              [7:0] irq_level;
+    wire                    clic_irq;
+    //
 
     assign dmem_wready      = dwready && (dwaddr[31:28] != CLINT_BASE);
     assign dwvalid          = (dwaddr[31:28] == CLINT_BASE) ? twvalid : dmem_wvalid;
-    assign dmem_waddr       = dwaddr;
+    assign dmem_waddr       = (dwaddr[31:28] != CLINT_BASE) ?dwaddr:32'b0;
     assign dmem_wdata       = dwdata;
     assign dmem_wstrb       = dwstrb;
 
@@ -122,12 +129,11 @@ end
 
         .stall              (stall),
         .exception          (exception),
+
+//        .timer_irq          (timer_irq),
+//        .sw_irq             (sw_irq),
+//        .interrupt          (interrupt),
         .timer_en           (timer_en),
-
-        .timer_irq          (timer_irq),
-        .sw_irq             (sw_irq),
-        .interrupt          (interrupt),
-
         .imem_ready         (imem_ready),
         .imem_valid         (imem_valid),
         .imem_addr          (imem_addr),
@@ -144,43 +150,57 @@ end
         .dmem_rvalid        (drvalid),
         .dmem_raddr         (draddr),
         .dmem_rresp         (drresp),
-        .dmem_rdata         (drdata)
+        .dmem_rdata         (drdata),
+        //
+        .irq_valid(irq_valid),
+        .irq_level(irq_level),
+        .irq_id(irq_id),
+        .clic_irq(clic_irq)
+        //
     );
 
-    assign twready          = dwready && (dwaddr[31:28] == CLINT_BASE);
+     //assign twready          = dwready ;// edited by me
+      
+    assign twready          = dwready && (dwaddr[31:28] == CLINT_BASE);//actual
     assign twaddr           = dwaddr;
     assign twdata           = dwdata;
     assign twstrb           = dwstrb;
 
     assign trready          = drready && (draddr[31:28] == CLINT_BASE);
+    //assign trready = drready;
     assign traddr           = draddr;
 
-    clint #(
+    CLIC #(
         .RV32M (RV32M),
         .RV32E (RV32E),
         .RV32B (RV32B),
-        .RV32C (RV32C)
-    ) clint (
+        .RV32C (RV32C),
+        .NUM_INTERRUPTS(NUM_INTERRUPTS)
+    ) clic(
         .clk                (clk),
         .resetb             (resetb),
-        .timer_en           (timer_en),
 
         .wready             (twready),
         .wvalid             (twvalid),
         .waddr              (twaddr),
         .wdata              (twdata),
         .wstrb              (twstrb),
-
+        .timer_en           (timer_en),
         .rready             (trready),
         .rvalid             (trvalid),
         .raddr              (traddr),
         .rresp              (trresp),
         .rdata              (trdata),
 
-        .timer_irq          (timer_irq),
-        .sw_irq             (sw_irq),
-        .ex_irq             (ex_irq)
+//        .timer_irq          (timer_irq),
+//        .sw_irq             (sw_irq),
+        .ex_irq             (ex_irq),
+        .irq_valid(irq_valid),
+        .irq_id(irq_id),
+        .irq_level(irq_level),
+        .clic_irq(clic_irq)
+//        .sw_irq(sw_irq),
+//        .ex_irq(ex_irq)
     );
 
 endmodule
-

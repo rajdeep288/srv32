@@ -2,7 +2,7 @@
 // Three pipeline stage RV32IM RISCV processor
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the “Software”), to deal
+// of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights 
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
@@ -11,7 +11,7 @@
 // The above copyright notice and this permission notice shall be included in
 // all copies or substantial portions of the Software.
 //
-// THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
@@ -27,6 +27,7 @@
 `define RS1         19:15
 `define RS2         24:20
 `define IMM12       31:20
+
 
 localparam  [31: 0] RESETVEC   = 32'h0000_0000;
 
@@ -116,6 +117,10 @@ localparam  [11: 0] CSR_MVENDORID   = 12'hF11,    // Vender ID
                     CSR_MTVAL       = 12'h343,    // Machine bad address or instructions
                     CSR_MIP         = 12'h344,    // Machine interrupt pending
 
+                    CSR_MNXTI        =12'h345,
+                    CSR_MINTSTATUS   =12'h346,
+                    CSR_MINTTHRESH   =12'h347,
+                    
                     CSR_SSTATUS     = 12'h100,    // Supervisor status register
                     CSR_SIE         = 12'h104,    // Supervisor interrupt-enable register
                     CSR_STVEC       = 12'h105,    // Supervisor trap handler base address
@@ -240,5 +245,16 @@ localparam  [31: 0] MTIME_BASE    = 32'h9000_0000,
                     MMIO_GETC     = 32'hA000_0020,
                     MMIO_EXIT     = 32'hA000_002C,
                     MMIO_TOHOST   = 32'hA000_0030,
-                    MMIO_FROMHOST = 32'hA000_0034;
-
+                    MMIO_FROMHOST = 32'hA000_0034,
+                    CLICCFG_BASE  = 32'h9000_0014,
+                    MNXTI_BASE    = 32'h9000_0018;
+//                    MINTSTATUS_BASE = 32'h9000_001c,
+//                    MINTTHRESH_BASE = 32'h9000_0020 ;
+                    
+ localparam [31:24] CLICINTIE_BASE  = 8'h91,
+                    CLICINTIP_BASE  = 8'h92,
+                    CLICINTCTL_BASE  = 8'h93,
+                    CLICINTATTR_BASE = 8'h94 ;
+                    
+                    
+                   
