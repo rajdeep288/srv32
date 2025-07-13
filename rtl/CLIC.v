@@ -133,26 +133,26 @@ always @(posedge clk or negedge resetb) begin
     end
 end
 
-reg [NUM_INTERRUPTS-1:0] ex_irq_prev;
+// reg [NUM_INTERRUPTS-1:0] ex_irq_prev;
 
-always @(posedge clk or negedge resetb) begin
-    if (!resetb) begin
-        ex_irq_prev <= 0;
-        clicintip    <= 0;
-    end else begin
-        for (i = 0; i < NUM_INTERRUPTS; i = i + 1) begin
-            if (clicintattr[i] == 1'b0) begin
-                // Level-triggered: set IP if signal high
-                clicintip[i] <= ex_irq[i];
-            end else begin
-                // Edge-triggered: set IP on rising edge
-                if (~ex_irq_prev[i] && ex_irq[i])
-                    clicintip[i] <= 1'b1;
-            end
-        end
-        ex_irq_prev <= ex_irq;
-    end
-end
+// always @(posedge clk or negedge resetb) begin
+//     if (!resetb) begin
+//         ex_irq_prev <= 0;
+//         clicintip    <= 0;
+//     end else begin
+//         for (i = 0; i < NUM_INTERRUPTS; i = i + 1) begin
+//             if (clicintattr[i] == 1'b0) begin
+//                 // Level-triggered: set IP if signal high
+//                 clicintip[i] <= ex_irq[i];
+//             end else begin
+//                 // Edge-triggered: set IP on rising edge
+//                 if (~ex_irq_prev[i] && ex_irq[i])
+//                     clicintip[i] <= 1'b1;
+//             end
+//         end
+//         ex_irq_prev <= ex_irq;
+//     end
+// end
 
 
 // Extract level bits from clicintctl[i]
